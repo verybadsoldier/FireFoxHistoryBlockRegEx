@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "__MSG_extensionName__",
-  "version": "2.0",
+  "version": "1.0",
 
   "description": "__MSG_extensionDescription__",
 
@@ -16,7 +16,7 @@
 
   "applications": {
     "gecko": {
-      "id": "historyblock@kain",
+      "id": "historyblock@vbs",
       "strict_min_version": "55.0"
     }
   },
@@ -52,5 +52,11 @@
 
   "options_ui": {
     "page": "options/index.html"
+  },
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "test@gmail.com"
+    }
   }
 }

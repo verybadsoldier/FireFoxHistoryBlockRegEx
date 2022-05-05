@@ -1,13 +1,13 @@
 class Options {
   constructor() {
+    console.error('ctor');
     this.attachDOMListeners();
     
     browser.runtime.onMessage.addListener(
       message => this.onMessage(message) );
 
-    this.renderBlacklistType();
-    this.renderBlacklistMatching();
     this.renderBlacklist();
+    this.renderListMode();
   }
 
   /**
@@ -20,12 +20,10 @@ class Options {
       "click", () => this.addToBlacklist());
     document.querySelector("#removeFromBlacklist").addEventListener(
       "click", () => this.removeFromBlacklist());
-    document.querySelector("#blacklisttype").addEventListener(
-      "change", event => this.changeBlacklistType(event.target.value));
-    document.querySelector("#blacklistmatching").addEventListener(
-      "change", event => this.changeBlacklistMatching(event.target.value));
     document.querySelector("#import").addEventListener(
       "click", () => this.importBlacklist() );
+    document.querySelector("#listmode").addEventListener(
+      "change", event => this.changeListMode(event.target.value));
   }
 
   /**
@@ -67,6 +65,8 @@ class Options {
    *         the blacklist.
    */
   async addToBlacklist() {
+    console.error('addToBlacklist');
+
     let input = prompt(browser.i18n.getMessage('addUrl'));
     if(input) {
       let urls = input.split(',');
@@ -114,77 +114,12 @@ class Options {
     }
   }
 
-  /**
-   * Sends a message to have HistoryBlock change the blacklist encryption type.
-   *
-   * @param {string} blacklistType
-   *        The type of encryption to use on blacklist entries.
-   * @return {Promise} promise
-   *         A Promise that will be fulfilled after the blacklist encryption 
-   *         type has been changed.
-   */
-  async changeBlacklistType(blacklistType) {
-    if(blacklistType === 'none' && 
-        confirm(browser.i18n.getMessage('changeBlacklistTypeNone')) ||
-       blacklistType === 'sha1' && 
-        confirm(browser.i18n.getMessage('changeBlacklistTypeSHA1'))) {
-      await browser.runtime.sendMessage({action: 'changeBlacklistType', type: blacklistType});
-    }
-    
-    await this.renderBlacklistType();
-  }
-
-  /**
-   * Sends a message to have HistoryBlock change the matching technique.
-   *
-   * @param {string} matching
-   *        The technique of matching to use on URLs.
-   * @return {Promise} promise
-   *         A Promise that will be fulfilled after the blacklist URL matching
-   *         technique has been changed.
-   */
-  async changeBlacklistMatching(matching) {
-    if(matching === 'domain' && 
-        confirm(browser.i18n.getMessage('changeMatchingToDomain')) ||
-       matching === 'subdomain' && 
-        confirm(browser.i18n.getMessage('changeMatchingToSubdomain')) ||
-       matching === 'url' && 
-        confirm(browser.i18n.getMessage('changeMatchingToURL'))) {
-      await browser.runtime.sendMessage({action: 'changeBlacklistMatching', matching: matching});
+  async changeListMode(listMode) {
+    if(listMode === 'whitelist' || listMode === 'blacklist') {
+      await browser.runtime.sendMessage({action: 'changeListMode', listMode: listMode});
     }
       
     await this.renderBlacklistMatching();
-  }
-
-  /**
-   * Renders the blacklist encryption type controls.
-   *
-   * @return {Promise} promise
-   *         A Promise that will be fulfilled after the blacklist encryption
-   *         type elements have been rendered.
-   */
-  async renderBlacklistType() {
-    let storage = await browser.storage.sync.get();
-
-    if(typeof storage.type !== 'string') {
-      storage.type = 'sha1';
-    }
-
-    if(storage.type === 'none') {
-      document.querySelector("#import").style.visibility = 'hidden';
-    }
-    else if(storage.type === 'sha1') {
-      document.querySelector("#import").style.visibility = 'visible';
-    }
-
-    let radios = document.querySelectorAll('#blacklisttype input');
-
-    for(let i=0; i<radios.length; i++) {
-      let radio = radios[i];
-      if(radio.value === storage.type) {
-        radio.checked = true;
-      }
-    }
   }
 
   /**
@@ -197,15 +132,27 @@ class Options {
   async renderBlacklistMatching() {
     let storage = await browser.storage.sync.get();
 
-    if(typeof storage.matching !== 'string') {
-      storage.matching = 'domain';
-    }
-
     let radios = document.querySelectorAll('#blacklistmatching input');
 
     for(let i=0; i<radios.length; i++) {
       let radio = radios[i];
       if(radio.value === storage.matching) {
+        radio.checked = true;
+      }
+    }
+  }
+
+  async renderListMode() {
+    console.error('Optfffffsdf');
+
+    let storage = await browser.storage.sync.get();
+
+    let radios = document.querySelectorAll('#listmode input');
+
+    for(let i=0; i<radios.length; i++) {
+      console.error('Optfffffsdff1111');
+      let radio = radios[i];
+      if(radio.value === storage.listMode) {
         radio.checked = true;
       }
     }
@@ -224,9 +171,9 @@ class Options {
     if(storage.blacklist) {
       let el = document.querySelector("#blacklist");
       el.innerHTML = null;
-      storage.blacklist.forEach( (hash) => {
+      storage.blacklist.forEach( (regex) => {
         let li = document.createElement('li');
-        li.innerHTML = hash;
+        li.innerHTML = regex;
         el.appendChild(li);
       });
     }

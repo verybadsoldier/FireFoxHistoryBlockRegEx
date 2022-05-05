@@ -10,8 +10,6 @@ class HistoryBlock {
    * components of the HistoryBlock addon.
    */
   constructor() {
-    this.changeBlacklistType();
-    this.changeBlacklistMatching();
     this.createContextMenuItems();
     this.attachEventListeners();
   }
@@ -37,12 +35,6 @@ class HistoryBlock {
    * Attaches the various HistoryBlock event listeners.
    */
   attachEventListeners() {
-    browser.tabs.onRemoved.addListener( 
-      (tabId, removeInfo) => this.onTabRemoved(tabId, removeInfo)
-    );
-    browser.windows.onRemoved.addListener(
-      windowId => this.onWindowRemoved(windowId)
-    );
     browser.history.onVisited.addListener(
       info => this.onPageVisited(info)
     );
@@ -70,13 +62,9 @@ class HistoryBlock {
         return this.unblock(message.url);
       case 'clearBlacklist':
         return this.clearBlacklist();
-      case 'changeBlacklistType':
-        await this.changeBlacklistType(message.type)
-        return this.clearBlacklist();
-      case 'changeBlacklistMatching':
-        await this.changeBlacklistMatching(message.matching);
-        return this.clearBlacklist();
-    }
+      case 'changeListMode':
+        await this.changeListMode(message.listMode);
+      }
   }
 
   /**
@@ -101,65 +89,6 @@ class HistoryBlock {
   }
 
   /**
-   * Called when a tab is removed (closed). If the hashed domain name of the 
-   * url of the closed tab exists in the HistoryBlock blacklist, then tell the
-   * session to forget about that closed tab, thus removing it from the 
-   * recently closed tabs list.
-   *
-   * @param  {integer} tabId
-   *         The identifier of the tab before it was closed. Note: tabs that are
-   *         closed lose their tabId, so this value is useless.
-   * @param  {object} removeInfo
-   *         Metadata about the removed tab.
-   * @return {Promise} promise
-   *         A Promise that is fulfilled after a tab has been removed and then
-   *         potentially forgotten.
-   */
-  async onTabRemoved(tabId, removeInfo) {
-    let info = await browser.sessions.getRecentlyClosed({maxResults: 1});
-
-    if(info[0].tab) {
-      let tab = info[0].tab;
-      let domain = this.matcher.match(tab.url);
-      let hash = await this.hash.digest(domain);
-      let blacklist = await this.getBlacklist();
-
-      if(blacklist.includes(hash)) {
-        await browser.sessions.forgetClosedTab(tab.windowId, tab.sessionId);
-      }
-    }
-  }
-
-  /**
-   * Called when a window is removed (closed). If the hashed domain name of the
-   * url of the first tab in the closed window exists in the HistoryBlock 
-   * blacklist, then tell the session to forget about that closed window, thus
-   * removing it from the recently closed windows list.
-   *
-   * @param  {integer} windowId
-   *         The identifier of the window before it was closed. Note: windows 
-   *         that are closed lose their windowId, so this value is useless.
-   * @return {Promise} promise
-   *         A Promise that is fulfilled after a window has been removed and
-   *         then potentially forgotten.
-   */
-  async onWindowRemoved(windowId) {
-    let info = await browser.sessions.getRecentlyClosed({maxResults: 1});
-
-    if(info[0].window) {
-      // If there is a window, there is a tab.
-      let tab = info[0].window.tabs[0];
-      let domain = this.matcher.match(tab.url);
-      let hash = await this.hash.digest(domain);
-      let blacklist = await this.getBlacklist();
-
-      if(blacklist.includes(hash)) {
-        await browser.sessions.forgetClosedWindow(info[0].window.sessionId);
-      }
-    }
-  }
-
-  /**
    * Called when a page finishes loading completely and is added to history. If
    * the domain name of the url of this visit exists in the HistoryBlock 
    * blacklist, then remove the url from the history.
@@ -171,12 +100,29 @@ class HistoryBlock {
    *         then potentially removed from the browser history.
    */
   async onPageVisited(info) {
-    let domain = this.matcher.match(info.url);
-    let hash = await this.hash.digest(domain);
     let blacklist = await this.getBlacklist();
 
-    if(blacklist.includes(hash)) {
+    console.error('URL: ' + info.url);
+    
+    let storage = await browser.storage.sync.get();
+
+    let isBlacklist = storage.listMode === 'blacklist';
+    let found = false;
+    for(let i = 0; i < blacklist.length; i++) {
+      console.error('Checking match: ' + blacklist[i]);
+      var re = new RegExp(blacklist[i]);
+      if (re.test(info.url)) {
+        found = true;
+        break;
+      }
+    }
+
+    if((isBlacklist && found) || (!isBlacklist && !found)) {
+      console.error('BLOCKED');
       await browser.history.deleteUrl({'url': info.url});
+    }
+    else {
+      console.error('no blocked');
     }
   }
 
@@ -249,23 +195,18 @@ class HistoryBlock {
    *         A Promise that is fulfilled after the given URL is potentially
    *         added to the blacklist.
    */
-  async block(url) {
-    let domain = this.matcher.match(url);
+  async block(regex) {
+    let blacklist = await this.getBlacklist();
 
-    if(domain) {
-      let hash = await this.hash.digest(domain);
-      let blacklist = await this.getBlacklist();
+    if(!blacklist.includes(regex)) {
+      blacklist.push(regex);
 
-      if(!blacklist.includes(hash)) {
-        blacklist.push(hash);
+      await browser.storage.sync.set({blacklist:blacklist});
 
-        await browser.storage.sync.set({blacklist:blacklist});
+      console.error('Block: ' + blacklist);
 
-        // Purposefully do not wait for this Promise to be fulfilled.
-        browser.runtime.sendMessage({action: 'blacklistUpdated'});
-
-        await browser.history.deleteUrl({'url': url});
-      }
+      // Purposefully do not wait for this Promise to be fulfilled.
+      browser.runtime.sendMessage({action: 'blacklistUpdated'});
     }
   }
 
@@ -278,81 +219,25 @@ class HistoryBlock {
    *         A Promise that is fulfilled after the given URL is potentially
    *         removed from the blacklist.
    */
-  async unblock(url) {
-    let domain = this.matcher.match(url);
-
-    if(domain) {
-      let hash = await this.hash.digest(domain);
-      let blacklist = await this.getBlacklist();
-
-      if(blacklist.includes(hash)) {
-        blacklist.splice(blacklist.indexOf(hash), 1);
-
-        await browser.storage.sync.set({blacklist:blacklist});
-
-        // Purposefully do not wait for this Promise to be fulfilled.
-        browser.runtime.sendMessage({action: 'blacklistUpdated'});
-      }
-    }
-  }
-
-  /**
-   * Changes the type of blacklist encryption being used.
-   *
-   * @param  {string} type
-   *         The type of blacklist encryption to use.
-   * @return {Promise} promise
-   *         A Promise that is fulfilled after the blacklist encryption type
-   *         is potentially changed.
-   */
-  async changeBlacklistType(type) {
+  async unblock(regex) {
     let blacklist = await this.getBlacklist();
 
-    if(!type) {
-      type = await browser.storage.sync.get('type');
-      type = type.type;
-    }
+    if(blacklist.includes(regex)) {
+      blacklist.splice(blacklist.indexOf(regex), 1);
 
-    if(type === 'none') {
-      this.hash = new NoHash();
+      await browser.storage.sync.set({blacklist:blacklist});
+
+      // Purposefully do not wait for this Promise to be fulfilled.
+      browser.runtime.sendMessage({action: 'blacklistUpdated'});
     }
-    else {
-      this.hash = new SHA1();
-      // Hash the old non-blocked entry.
-      blacklist.forEach(async (domain) => {
-        await this.block(domain);
-      })
-    }
-    
-    await browser.storage.sync.set({type: type});
   }
-
-  /**
-   * Changes the blacklist matching being used.
-   *
-   * @param  {string} matching
-   *         The technique of matching to use.
-   * @return {Promise} promise
-   *         A Promise that is fulfilled after the blacklist URL matching
-   *         technique is potentially changed.
-   */
-  async changeBlacklistMatching(matching) {
-    if(!matching) {
-      matching = await browser.storage.sync.get('matching');
-      matching = matching.matching;
+  
+  async changeListMode(listMode) {
+    if(!listMode) {
+      listMode = await browser.storage.sync.get('listMode');
+      listMode = listMode.listMode;
     }
-
-    if(matching === 'subdomain') {
-      this.matcher = new SubdomainMatcher();
-    }
-    else if(matching === 'url') {
-      this.matcher = new URLMatcher();
-    }
-    else {
-      this.matcher = new DomainMatcher();
-    }
-
-    await browser.storage.sync.set({matching: matching});
+    await browser.storage.sync.set({listMode: listMode});
   }
 }
 
