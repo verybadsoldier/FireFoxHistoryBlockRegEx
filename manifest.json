@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "__MSG_extensionName__",
-  "version": "1.0",
+  "version": "1.0.1",
 
   "description": "__MSG_extensionDescription__",
 
@@ -12,11 +12,9 @@
 
   "default_locale": "en",
 
-  "homepage_url": "https://github.com/kainsavage/HistoryBlock",
-
   "applications": {
     "gecko": {
-      "id": "historyblock@vbs",
+      "id": "historyblockregex@vbs",
       "strict_min_version": "55.0"
     }
   },
@@ -52,11 +50,5 @@
 
   "options_ui": {
     "page": "options/index.html"
-  },
-
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "test@gmail.com"
-    }
   }
 }

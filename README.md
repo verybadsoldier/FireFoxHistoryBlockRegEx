@@ -2,6 +2,10 @@
 
 HistoryBlock is a browser extension for maintaining a blacklist of undesirable web addresses which should not be tracked by the history or the recently closed tabs/windows of the browser.
 
+## RegEx Version
+
+In this version the URL matching is purely based on regular expressions. Also whitelist mode is supported also.
+
 ## Options Page
 
 ### Blacklist Encryption
